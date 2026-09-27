@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="ur" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Barthla Geo Map</title>
+
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#182b45">
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.locatecontrol@0.79.0/dist/L.Control.Locate.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@geoman-io/leaflet-geoman-free@2.18.0/dist/leaflet-geoman.css">
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:Arial,sans-serif}
+#map{position:absolute;top:0;left:0;width:100%;height:100%;background:#111}
+
+.top-header{
+    position:absolute;top:0;left:0;right:0;height:52px;
+    background:#182b45;display:flex;align-items:center;justify-content:space-between;
+    padding:0 10px;z-index:5000;box-shadow:0 2px 8px rgba(0,0,0,.5);
+}
+.top-controls{display:flex;align-items:center;gap:7px;direction:ltr}
+
+.select-pill{
+    background:#2b4162;color:#fff;border:1px solid #3c5880;
+    border-radius:18px;padding:6px 12px;height:34px;font-size:13px;outline:none;
+}
+#fileSelect{min-width:170px;cursor:pointer;font-weight:700}
+#searchInput{width:200px;direction:ltr;text-align:left}
+.user-btn{
+    width:32px;height:32px;background:#f4b400;color:#182b45;
+    border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;
+}
+.menu-icon{color:#fff;font-size:22px;width:35px;text-align:center}
+
+.pure-killa-text{background:transparent!important;border:none!important;box-shadow:none!important}
+.pure-killa-text span{
+    display:block;transform:translate(-50%,-50%);color:#ffff00;font-weight:900;
+    font-size:12px;white-space:nowrap;pointer-events:none;
+    text-shadow:1.5px 1.5px 2px #000,-1.5px -1.5px 2px #000,1.5px -1.5px 2px #000,-1.5px 1.5px 2px #000;
+}
+
+.pure-murabba-text{background:transparent!important;border:none!important;box-shadow:none!important}
+.pure-murabba-text span{
+    display:block;transform:translate(-50%,-50%);color:#00ffff;font-weight:900;
+    font-size:15px;white-space:nowrap;pointer-events:none;
+    text-shadow:2px 2px 3px #000,-2px -2px 3px #000,2px -2px 3px #000,-2px 2px 3px #000;
+}
+
+.map-badge{
+    position:absolute;bottom:15px;right:15px;background:rgba(18,43,64,.92);
+    color:#00e5ff;border:1px solid #00e5ff;padding:6px 12px;
+    border-radius:20px;font-size:12px;z-index:4500;
+}
+
+#loadingMsg{
+    position:absolute;top:65px;left:50%;transform:translateX(-50%);
+    background:#182b45;color:#fff;padding:8px 18px;border-radius:20px;
+    z-index:6000;font-size:13px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.4);
+}
+#loadingMsg.error{background:#b71c1c}
+#loadingMsg.hidden{display:none}
+
+@media(max-width:700px){
+    .top-header{height:50px;padding:0 6px}
+    .top-controls{gap:4px}
+    #fileSelect{min-width:110px}
+    #searchInput{width:120px;font-size:12px}
+    .select-pill{padding:5px 8px;font-size:11px}
+    #coordSearchBtn{font-size:10px;padding:5px 6px}
+    .map-badge{bottom:10px;right:10px;font-size:10px}
+}
+
+.leaflet-top,.leaflet-bottom{z-index:4500}
+.leaflet-popup-pane{z-index:7000}
+</style>
+</head>
+
+<body>
+
+<div class="top-header">
+    <div class="menu-icon">⋮</div>
+
+    <div class="top-controls">
+        <select class="select-pill" id="fileSelect"></select>
+
+        <input id="searchInput" type="text" autocomplete="off"
+               placeholder="28.54456,70.54564"
+               class="select-pill">
+
+        <button id="coordSearchBtn" class="select-pill"
+                style="cursor:pointer;background:#f4b400;color:#182b45;font-weight:900;border:0;">
+            📍 Coordinate
+        </button>
+    </div>
+
+    <div class="user-btn">👤</div>
+</div>
+
+<div id="loadingMsg">نقشہ تیار ہو رہا ہے...</div>
+<div id="map"></div>
+<div class="map-badge">Google Hybrid Satellite</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.locatecontrol@0.79.0/dist/L.Control.Locate.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@geoman-io/leaflet-geoman-free@2.18.0/dist/leaflet-geoman.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<script>
+(function(){
+"use strict";
+
+/* =========================================================
+   ✅ KMZ FILE LIST — YAHAN ADD/REMOVE KARO
+   Format: { file: "filename.kmz", name: "Dropdown Name" }
+   ========================================================= */
+var KMZ_FILES = [
+    { file: "data.kmz",  name: "Barthla (SAR)" },
+	{ file: "234p.kmz",  name: "234P" },
+	{ file: "175p.kmz",  name: "175p" },
+	{ file: "Goth Jungo.kmz",  name: "Goth jungo" },
+	{ file: "Sadiqabad.kmz",  name: "sadiqabad" },
+	{ file: "Kotsabzal.kmz",  name: "kotSabzal" }
+    /* Naya KMZ add karne ke liye neeche wali line copy karo:
+    , { file: "234p.kmz", name: "234P" }
+    , { file: "mouza3.kmz", name: "Mouza 3" }
+    */
+];
+/* ========================================================= */
+
+
+var loadingMsg = document.getElementById("loadingMsg");
+var fileSelect = document.getElementById("fileSelect");
+var searchInput = document.getElementById("searchInput");
+
+function showError(msg){
+    loadingMsg.classList.remove("hidden");
+    loadingMsg.classList.add("error");
+    loadingMsg.innerText = msg;
+    console.error(msg);
+}
+
+if(typeof L === "undefined"){
+    showError("Leaflet load نہیں ہوا۔ Internet چیک کریں۔");
+    return;
+}
+
+/* =========================================================
+   MAP
+========================================================= */
+var map = L.map("map", {
+    preferCanvas:true,
+    zoomControl:true,
+    zoomAnimation:true,
+    fadeAnimation:true
+});
+
+map.setView([28.400000,70.300000], 13);
+map.zoomControl.setPosition("topleft");
+
+L.tileLayer(
+    "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+    { maxZoom:22, maxNativeZoom:21, attribution:"Google Satellite" }
+).addTo(map);
+
+/* GPS */
+if(typeof L.control.locate === "function"){
+    try{
+        L.control.locate({
+            position:"topleft", flyTo:true, keepCurrentZoomLevel:true,
+            strings:{title:"میری لائیو لوکیشن"},
+            locateOptions:{enableHighAccuracy:true, maximumAge:10000, timeout:15000}
+        }).addTo(map);
+    }catch(e){}
+}
+
+/* GEOMAN */
+if(map.pm && typeof map.pm.addControls === "function"){
+    try{
+        map.pm.addControls({
+            position:"bottomleft",
+            drawMarker:true, drawPolyline:true, drawPolygon:true,
+            drawCircle:false, drawRectangle:true,
+            editMode:true, dragMode:true, removalMode:true
+        });
+    }catch(e){}
+}
+
+/* =========================================================
+   VARIABLES
+========================================================= */
+var labelItems = [];
+var polygons = [];
+var labelLayer = L.layerGroup().addTo(map);
+var selectedMurabbas = {};
+var selectedName = null;
+
+var defaultStyle = { color:"#e63946", weight:1.2, fillColor:"#000", fillOpacity:0 };
+var highlightStyle = { color:"#ffff00", weight:2.5, fillColor:"#ffff00", fillOpacity:.35 };
+
+function escapeHtml(text){
+    return String(text || "")
+        .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+}
+function normalizeName(name){ return String(name || "").trim().toLowerCase(); }
+
+function getMurabbaKey(name){
+    if(!name) return null;
+    var value = String(name).trim();
+    var slash = value.lastIndexOf("/");
+    if(slash > 0 && /^\d+$/.test(value.substring(slash + 1).trim())){
+        return normalizeName(value.substring(0, slash));
+    }
+    return normalizeName(value);
+}
+function isKillaName(name){ return /^.+\/\d+$/.test(String(name || "").trim()); }
+
+function getItemByName(name){
+    if(!name) return null;
+    var q = normalizeName(name);
+    return labelItems.find(function(i){ return normalizeName(i.name) === q; }) ||
+           labelItems.find(function(i){ return normalizeName(i.name).includes(q); }) || null;
+}
+function getPolygonByName(name){
+    if(!name) return null;
+    var q = normalizeName(name);
+    return polygons.find(function(p){ return p.customName && normalizeName(p.customName) === q; }) ||
+           polygons.find(function(p){ return p.customName && normalizeName(p.customName).includes(q); }) || null;
+}
+function getMurabbaItems(name){
+    var key = getMurabbaKey(name); if(!key) return [];
+    return labelItems.filter(function(i){ return getMurabbaKey(i.name) === key; });
+}
+function getMurabbaPolygons(name){
+    var key = getMurabbaKey(name); if(!key) return [];
+    return polygons.filter(function(p){ return getMurabbaKey(p.customName) === key; });
+}
+
+function createKillaLabel(item){
+    return L.marker([item.lat,item.lng], {
+        icon:L.divIcon({
+            className:"pure-killa-text",
+            html:"<span>" + escapeHtml(item.name) + "</span>",
+            iconSize:[0,0], iconAnchor:[0,0]
+        }),
+        interactive:false, zIndexOffset:10000
+    });
+}
+function createMurabbaLabel(item){
+    return L.marker([item.lat,item.lng], {
+        icon:L.divIcon({
+            className:"pure-murabba-text",
+            html:"<span>" + escapeHtml(item.name) + "</span>",
+            iconSize:[0,0], iconAnchor:[0,0]
+        }),
+        interactive:false, zIndexOffset:11000
+    });
+}
+
+function selectFeature(name, openPopup){
+    if(!name) return false;
+    var item = getItemByName(name);
+    var poly = getPolygonByName(name);
+    if(!item && !poly) return false;
+
+    var actualName = (poly && poly.customName) || (item && item.name) || name;
+    var murabbaKey = getMurabbaKey(actualName);
+    if(!murabbaKey) return false;
+
+    selectedMurabbas[murabbaKey] = true;
+    selectedName = actualName;
+
+    getMurabbaPolygons(actualName).forEach(function(p){ p.setStyle(highlightStyle); });
+
+    var bounds = L.latLngBounds();
+    getMurabbaPolygons(actualName).forEach(function(p){ bounds.extend(p.getBounds()); });
+    getMurabbaItems(actualName).forEach(function(it){ bounds.extend([it.lat, it.lng]); });
+
+    if(bounds.isValid()){
+        map.fitBounds(bounds, { maxZoom:18, padding:[30,30], animate:true });
+    }
+
+    if(openPopup && poly){
+        poly.bindPopup(
+            "<b>تفصیل:</b> " + escapeHtml(poly.customName || "") +
+            (poly.customDesc ? "<br>" + poly.customDesc : "")
+        ).openPopup();
+    }
+    updateSmartLabels();
+    return true;
+}
+
+function parseCoords(text){
+    var coords = [];
+    if(!text) return coords;
+    var re = /(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s*,\s*(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
+    var m;
+    while((m = re.exec(text)) !== null){
+        var lng = parseFloat(m[1]), lat = parseFloat(m[2]);
+        if(Number.isFinite(lat) && Number.isFinite(lng)) coords.push([lat, lng]);
+    }
+    return coords;
+}
+
+/* =========================================================
+   SMART LABELS
+========================================================= */
+function updateSmartLabels(){
+    labelLayer.clearLayers();
+    if(labelItems.length === 0) return;
+
+    var selectedKeys = Object.keys(selectedMurabbas).filter(function(k){ return selectedMurabbas[k]; });
+
+    if(selectedKeys.length > 0){
+        labelItems.forEach(function(item){
+            var key = getMurabbaKey(item.name);
+            if(selectedMurabbas[key]){
+                labelLayer.addLayer(item.isKilla ? createKillaLabel(item) : createMurabbaLabel(item));
+            }
+        });
+        return;
+    }
+
+    var zoom = map.getZoom();
+    if(zoom < 14) return;
+    var bounds = map.getBounds();
+    var count = 0;
+
+    for(var i=0; i<labelItems.length; i++){
+        var item = labelItems[i];
+        if(!bounds.contains([item.lat, item.lng])) continue;
+        if(zoom < 16 && item.isKilla) continue;
+
+        labelLayer.addLayer(item.isKilla ? createKillaLabel(item) : createMurabbaLabel(item));
+        count++;
+        if(count >= 400) break;
+    }
+}
+
+/* =========================================================
+   LOAD KMZ
+========================================================= */
+async function loadKMZ(filename){
+    try{
+        loadingMsg.classList.remove("hidden","error");
+        loadingMsg.innerText = "KMZ لوڈ ہو رہا ہے...";
+
+        if(typeof JSZip === "undefined") throw new Error("JSZip load نہیں ہوا");
+
+        var response = await fetch(filename, { cache:"default" });
+        if(!response.ok) throw new Error(filename + " نہیں ملی (HTTP " + response.status + ")");
+
+        var buffer = await response.arrayBuffer();
+        if(!buffer || buffer.byteLength < 20) throw new Error(filename + " خالی ہے");
+
+        loadingMsg.innerText = "KMZ unpack ہو رہا ہے...";
+        var zip = await JSZip.loadAsync(buffer);
+        var files = Object.keys(zip.files);
+        var kmlKey = files.find(function(k){ return k.toLowerCase().endsWith(".kml"); });
+        if(!kmlKey) throw new Error("KMZ میں KML نہیں ملا");
+
+        var kmlText = await zip.file(kmlKey).async("string");
+        if(!kmlText) throw new Error("KML خالی ہے");
+
+        loadingMsg.innerText = "نقشہ تیار ہو رہا ہے...";
+
+        var parser = new DOMParser();
+        var xml = parser.parseFromString(kmlText, "text/xml");
+        if(xml.getElementsByTagName("parsererror").length) throw new Error("KML خراب ہے");
+
+        var placemarks = xml.getElementsByTagName("Placemark");
+        if(placemarks.length === 0) throw new Error("Placemark نہیں ملا");
+
+        /* Clear previous layers */
+        polygons.forEach(function(p){ map.removeLayer(p); });
+        polygons = [];
+        labelItems = [];
+        selectedMurabbas = {};
+        labelLayer.clearLayers();
+
+        var allBounds = L.latLngBounds();
+
+        for(var i=0; i<placemarks.length; i++){
+            var pm = placemarks[i];
+            var nameNode = pm.getElementsByTagName("name")[0];
+            var descNode = pm.getElementsByTagName("description")[0];
+            var name = nameNode ? nameNode.textContent.trim() : "";
+            var desc = descNode ? descNode.textContent.trim() : "";
+
+            var polyNodes = pm.getElementsByTagName("Polygon");
+            for(var j=0; j<polyNodes.length; j++){
+                var cNode = polyNodes[j].getElementsByTagName("coordinates")[0];
+                if(!cNode) continue;
+                var pts = parseCoords(cNode.textContent);
+                if(pts.length < 3) continue;
+
+                var poly = L.polygon(pts, defaultStyle);
+                poly.customName = name;
+                poly.customDesc = desc;
+
+                poly.on("click", function(e){
+                    var cur = this;
+                    selectFeature(cur.customName, false);
+                    cur.bindPopup(
+                        "<b>تفصیل:</b> " + escapeHtml(cur.customName || "") +
+                        (cur.customDesc ? "<br>" + cur.customDesc : "")
+                    ).openPopup(e.latlng);
+                });
+
+                poly.addTo(map);
+                polygons.push(poly);
+                allBounds.extend(poly.getBounds());
+            }
+
+            var pointNodes = pm.getElementsByTagName("Point");
+            for(var k=0; k<pointNodes.length; k++){
+                var pNode = pointNodes[k].getElementsByTagName("coordinates")[0];
+                if(!pNode || !name) continue;
+                var pCoords = parseCoords(pNode.textContent);
+                if(pCoords.length === 0) continue;
+                var pt = pCoords[0];
+                labelItems.push({
+                    lat:pt[0], lng:pt[1], name:name,
+                    isKilla:isKillaName(name), isMurabba:!isKillaName(name)
+                });
+                allBounds.extend(pt);
+            }
+        }
+
+        if(!allBounds.isValid()) throw new Error("Valid coordinates نہیں ملیں");
+
+        map.fitBounds(allBounds, { padding:[20,20] });
+        updateSmartLabels();
+
+        loadingMsg.classList.add("hidden");
+        console.log("✅ Loaded:", filename, { polygons: polygons.length, labels: labelItems.length });
+
+    }catch(error){
+        console.error("KMZ ERROR:", error);
+        showError("KMZ لوڈ نہیں ہوئی: " + error.message);
+    }
+}
+
+/* =========================================================
+   MAP EVENTS
+========================================================= */
+map.on("zoomend moveend", updateSmartLabels);
+map.on("zoomstart", function(){ labelLayer.clearLayers(); });
+
+/* =========================================================
+   COORDINATE SEARCH
+========================================================= */
+function searchCoordinate(value){
+    var q = String(value || "").trim().replace(/\s+/g,"").replace(/[()[\]]/g,"");
+    var m = q.match(/^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/);
+    if(!m) return false;
+
+    var lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+    if(!Number.isFinite(lat) || !Number.isFinite(lng) ||
+       lat < -90 || lat > 90 || lng < -180 || lng > 180){
+        alert("Coordinate درست نہیں!\nFormat: lat,lng\nمثال: 28.54456,70.54564");
+        return true;
+    }
+
+    selectedMurabbas = {};
+    polygons.forEach(function(p){ p.setStyle(defaultStyle); });
+    selectedName = null;
+
+    map.setView([lat, lng], 18, { animate:true });
+
+    if(window.coordinateMarker) map.removeLayer(window.coordinateMarker);
+
+    window.coordinateMarker = L.marker([lat, lng], {
+        title: lat + ", " + lng, zIndexOffset: 20000
+    }).addTo(map);
+
+    window.coordinateMarker.bindPopup(
+        "<b>📍 Location</b><br>Lat: " + lat.toFixed(6) + "<br>Lng: " + lng.toFixed(6)
+    ).openPopup();
+
+    updateSmartLabels();
+    return true;
+}
+
+function handleSearch(){
+    var q = searchInput.value.trim();
+    if(!q) return;
+    if(searchCoordinate(q)) return;
+    alert("Coordinate اس format میں لکھیں:\n28.54456,70.54564");
+}
+
+searchInput.addEventListener("change", handleSearch);
+searchInput.addEventListener("keydown", function(e){
+    if(e.key === "Enter"){ e.preventDefault(); handleSearch(); }
+});
+searchInput.addEventListener("focus", function(){ this.select(); });
+
+document.getElementById("coordSearchBtn").addEventListener("click", function(){
+    var v = searchInput.value.trim();
+    if(!v){ searchInput.focus(); return; }
+    if(!searchCoordinate(v)){
+        alert("Coordinate اس format میں لکھیں:\n28.54456,70.54564");
+        searchInput.focus();
+    }
+});
+
+/* =========================================================
+   ✅ BUILD DROPDOWN FROM KMZ_FILES ARRAY
+========================================================= */
+function buildDropdown(){
+    fileSelect.innerHTML = "";
+    KMZ_FILES.forEach(function(item){
+        var opt = document.createElement("option");
+        opt.value = item.file;
+        opt.textContent = item.name || item.file;
+        fileSelect.appendChild(opt);
+    });
+}
+
+fileSelect.addEventListener("change", function(){
+    var newFile = this.value;
+    if(!newFile) return;
+
+    if(window.coordinateMarker){
+        map.removeLayer(window.coordinateMarker);
+        window.coordinateMarker = null;
+    }
+    searchInput.value = "";
+    loadKMZ(newFile);
+});
+
+/* =========================================================
+   START
+========================================================= */
+buildDropdown();
+
+if(KMZ_FILES.length > 0){
+    fileSelect.value = KMZ_FILES[0].file;
+    loadKMZ(KMZ_FILES[0].file);
+} else {
+    showError("KMZ_FILES array خالی ہے");
+}
+
+/* =========================================================
+   SERVICE WORKER (optional)
+========================================================= */
+if("serviceWorker" in navigator){
+    window.addEventListener("load", function(){
+        navigator.serviceWorker.register("./sw.js?v=3").catch(function(){});
+    });
+}
+
+})();
+</script>
+
+</body>
+</html>
