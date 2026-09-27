@@ -39,7 +39,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:Ari
 .pure-killa-text{background:transparent!important;border:none!important;box-shadow:none!important}
 .pure-killa-text span{
     display:block;transform:translate(-50%,-50%);color:#ffff00;font-weight:900;
-    font-size:12px;white-space:nowrap;pointer-events:none;
+    font-size:14px;white-space:nowrap;pointer-events:none;
     text-shadow:1.5px 1.5px 2px #000,-1.5px -1.5px 2px #000,1.5px -1.5px 2px #000,-1.5px 1.5px 2px #000;
 }
 
@@ -256,7 +256,7 @@ function createMurabbaLabel(item){
 }
 
 /* =========================================================
-   SELECT FEATURE — Highlight + Zoom (text ghayab nahi)
+   SELECT FEATURE
 ========================================================= */
 function selectFeature(name, openPopup){
     if(!name) return false;
@@ -268,15 +268,11 @@ function selectFeature(name, openPopup){
     var murabbaKey = getMurabbaKey(actualName);
     if(!murabbaKey) return false;
 
-    /* Purana highlight clear karo */
     polygons.forEach(function(p){ p.setStyle(defaultStyle); });
-
-    /* Naya highlight */
     getMurabbaPolygons(actualName).forEach(function(p){ p.setStyle(highlightStyle); });
 
     selectedName = actualName;
 
-    /* Zoom to murabba */
     var bounds = L.latLngBounds();
     getMurabbaPolygons(actualName).forEach(function(p){ bounds.extend(p.getBounds()); });
     getMurabbaItems(actualName).forEach(function(it){ bounds.extend([it.lat, it.lng]); });
@@ -285,7 +281,6 @@ function selectFeature(name, openPopup){
         map.fitBounds(bounds, { maxZoom:17, padding:[40,40], animate:true });
     }
 
-    /* Popup */
     if(openPopup && poly){
         poly.bindPopup(
             "<b>تفصیل:</b> " + escapeHtml(poly.customName || "") +
@@ -310,7 +305,7 @@ function parseCoords(text){
 }
 
 /* =========================================================
-   ✅ SMART LABELS — SIRF KILLA TEXT (Murabba text BAND)
+   ✅ SMART LABELS — SIRF KILLA TEXT
 ========================================================= */
 function updateSmartLabels(){
     labelLayer.clearLayers();
@@ -322,12 +317,10 @@ function updateSmartLabels(){
 
     var selectedKeys = Object.keys(selectedMurabbas).filter(function(k){ return selectedMurabbas[k]; });
 
-    /* Selected murabba ka killa text — hamesha dikhao */
     if(selectedKeys.length > 0){
         labelItems.forEach(function(item){
             var key = getMurabbaKey(item.name);
             if(selectedMurabbas[key]){
-                /* ✅ Sirf killa text — murabba text BAND */
                 if(item.isKilla){
                     labelLayer.addLayer(createKillaLabel(item));
                 }
@@ -335,10 +328,8 @@ function updateSmartLabels(){
         });
     }
 
-    /* Zoom bohot door — kuch nahi */
     if(zoom < 15) return;
 
-    /* Viewport ke killa labels */
     for(var i=0; i<labelItems.length; i++){
         var item = labelItems[i];
 
@@ -347,17 +338,16 @@ function updateSmartLabels(){
 
         if(!bounds.contains([item.lat, item.lng])) continue;
 
-        /* ✅ Sirf killa text dikhao — murabba text BAND */
         if(!item.isKilla) continue;
 
         labelLayer.addLayer(createKillaLabel(item));
         count++;
-        if(count >= 600) break;
+        if(count >= 800) break;
     }
 }
 
 /* =========================================================
-   LOAD KMZ
+   LOAD KMZ — Auto-generate labels from polygons
 ========================================================= */
 async function loadKMZ(filename){
     try{
@@ -390,7 +380,6 @@ async function loadKMZ(filename){
         var placemarks = xml.getElementsByTagName("Placemark");
         if(placemarks.length === 0) throw new Error("Placemark نہیں ملا");
 
-        /* Clear old */
         polygons.forEach(function(p){ map.removeLayer(p); });
         polygons = [];
         labelItems = [];
@@ -399,6 +388,8 @@ async function loadKMZ(filename){
         labelLayer.clearLayers();
 
         var allBounds = L.latLngBounds();
+        var totalPoints = 0;
+        var totalPolygons = 0;
 
         for(var i=0; i<placemarks.length; i++){
             var pm = placemarks[i];
@@ -407,10 +398,29 @@ async function loadKMZ(filename){
             var name = nameNode ? nameNode.textContent.trim() : "";
             var desc = descNode ? descNode.textContent.trim() : "";
 
-            /* POLYGONS */
-            var polyNodes = pm.getElementsByTagName("Polygon");
-            var polyCenters = [];
+            /* =========================================================
+               POINTS — Agar hain toh use karo
+            ========================================================= */
+            var pointNodes = pm.getElementsByTagName("Point");
+            for(var k=0; k<pointNodes.length; k++){
+                var pNode = pointNodes[k].getElementsByTagName("coordinates")[0];
+                if(!pNode || !name) continue;
+                var pCoords = parseCoords(pNode.textContent);
+                if(pCoords.length === 0) continue;
+                var pt = pCoords[0];
 
+                labelItems.push({
+                    lat:pt[0], lng:pt[1], name:name,
+                    isKilla:isKillaName(name), isMurabba:!isKillaName(name)
+                });
+                allBounds.extend(pt);
+                totalPoints++;
+            }
+
+            /* =========================================================
+               POLYGONS
+            ========================================================= */
+            var polyNodes = pm.getElementsByTagName("Polygon");
             for(var j=0; j<polyNodes.length; j++){
                 var cNode = polyNodes[j].getElementsByTagName("coordinates")[0];
                 if(!cNode) continue;
@@ -433,42 +443,16 @@ async function loadKMZ(filename){
                 poly.addTo(map);
                 polygons.push(poly);
                 allBounds.extend(poly.getBounds());
+                totalPolygons++;
 
-                var sumLat = 0, sumLng = 0;
-                for(var n=0; n<pts.length; n++){
-                    sumLat += pts[n][0];
-                    sumLng += pts[n][1];
-                }
-                polyCenters.push({ lat: sumLat / pts.length, lng: sumLng / pts.length });
-            }
-
-            /* POINTS */
-            var pointNodes = pm.getElementsByTagName("Point");
-            var hasPoint = false;
-
-            for(var k=0; k<pointNodes.length; k++){
-                var pNode = pointNodes[k].getElementsByTagName("coordinates")[0];
-                if(!pNode || !name) continue;
-                var pCoords = parseCoords(pNode.textContent);
-                if(pCoords.length === 0) continue;
-                var pt = pCoords[0];
-                hasPoint = true;
-
-                labelItems.push({
-                    lat:pt[0], lng:pt[1], name:name,
-                    isKilla:isKillaName(name), isMurabba:!isKillaName(name)
-                });
-                allBounds.extend(pt);
-            }
-
-            /* Agar Point nahi hai — Polygon center pe label */
-            if(!hasPoint && name && polyCenters.length > 0){
-                polyCenters.forEach(function(c){
+                /* ✅ Point na ho toh polygon ke center pe label banao */
+                if(pointNodes.length === 0 && name){
+                    var center = poly.getBounds().getCenter();
                     labelItems.push({
-                        lat:c.lat, lng:c.lng, name:name,
+                        lat:center.lat, lng:center.lng, name:name,
                         isKilla:isKillaName(name), isMurabba:!isKillaName(name)
                     });
-                });
+                }
             }
         }
 
@@ -481,7 +465,8 @@ async function loadKMZ(filename){
         loadingMsg.classList.add("hidden");
 
         console.log("✅ Loaded:", filename, {
-            polygons: polygons.length,
+            polygons: totalPolygons,
+            points: totalPoints,
             labels: labelItems.length,
             sample: labelItems[0] || "کوئی نہیں"
         });
@@ -493,7 +478,7 @@ async function loadKMZ(filename){
 }
 
 /* =========================================================
-   MAP EVENTS — Debounced zoom
+   MAP EVENTS
 ========================================================= */
 var zoomTimer = null;
 map.on("zoomend moveend", function(){
