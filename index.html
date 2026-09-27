@@ -36,15 +36,23 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:Ari
 }
 .menu-icon{color:#fff;font-size:22px;width:35px;text-align:center}
 
-/* ✅ KILLA text — CYAN BLUE (#00d4ff) */
+/* 🟡 KILLA (slash wala) — YELLOW — jaise 397/10, 418/6 */
 .pure-killa-text{background:transparent!important;border:none!important;box-shadow:none!important}
 .pure-killa-text span{
+    display:block;transform:translate(-50%,-50%);color:#ffff00;font-weight:900;
+    font-size:14px;white-space:nowrap;pointer-events:none;
+    text-shadow:1.5px 1.5px 2px #000,-1.5px -1.5px 2px #000,1.5px -1.5px 2px #000,-1.5px 1.5px 2px #000;
+}
+
+/* 🔵 NUMBER (sirf 2, 3, 25) — CYAN */
+.pure-number-text{background:transparent!important;border:none!important;box-shadow:none!important}
+.pure-number-text span{
     display:block;transform:translate(-50%,-50%);color:#00d4ff;font-weight:900;
     font-size:14px;white-space:nowrap;pointer-events:none;
     text-shadow:1.5px 1.5px 2px #000,-1.5px -1.5px 2px #000,1.5px -1.5px 2px #000,-1.5px 1.5px 2px #000;
 }
 
-/* ✅ MURABBA text — RED-ORANGE (#ff5500) */
+/* Murabba — CSS rehne do, use nahi hoga */
 .pure-murabba-text{background:transparent!important;border:none!important;box-shadow:none!important}
 .pure-murabba-text span{
     display:block;transform:translate(-50%,-50%);color:#ff5500;font-weight:900;
@@ -214,10 +222,22 @@ function getMurabbaKey(name){
     return normalizeName(value);
 }
 
-/* ✅ Killa: "418/6" type YA sirf "25" type */
+/* ✅ Slash wala killa — "397/10", "418/6" */
 function isKillaName(name){
     var n = String(name || "").trim();
-    return /^.+\/\d+$/.test(n) || /^\d+$/.test(n);
+    return /^.+\/\d+$/.test(n);
+}
+
+/* ✅ Sirf number — "2", "3", "25" */
+function isPureNumber(name){
+    return /^\d+$/.test(String(name || "").trim());
+}
+
+/* ✅ Text type check — 1 = slash killa, 2 = pure number, 0 = murabba */
+function getTextType(name){
+    if(isKillaName(name)) return 1;
+    if(isPureNumber(name)) return 2;
+    return 0;
 }
 
 function getItemByName(name){
@@ -241,6 +261,7 @@ function getMurabbaPolygons(name){
     return polygons.filter(function(p){ return getMurabbaKey(p.customName) === key; });
 }
 
+/* 🟡 Yellow label — slash wala killa */
 function createKillaLabel(item){
     return L.marker([item.lat,item.lng], {
         icon:L.divIcon({
@@ -251,6 +272,20 @@ function createKillaLabel(item){
         interactive:false, zIndexOffset:10000
     });
 }
+
+/* 🔵 Cyan label — pure number */
+function createNumberLabel(item){
+    return L.marker([item.lat,item.lng], {
+        icon:L.divIcon({
+            className:"pure-number-text",
+            html:"<span>" + escapeHtml(item.name) + "</span>",
+            iconSize:[0,0], iconAnchor:[0,0]
+        }),
+        interactive:false, zIndexOffset:10000
+    });
+}
+
+/* Murabba label — use nahi hoga */
 function createMurabbaLabel(item){
     return L.marker([item.lat,item.lng], {
         icon:L.divIcon({
@@ -260,6 +295,14 @@ function createMurabbaLabel(item){
         }),
         interactive:false, zIndexOffset:11000
     });
+}
+
+/* ✅ Smart label picker — type ke hisab se */
+function createSmartLabel(item){
+    var t = getTextType(item.name);
+    if(t === 1) return createKillaLabel(item);   /* 🟡 yellow */
+    if(t === 2) return createNumberLabel(item);  /* 🔵 cyan */
+    return null;                                  /* murabba — nahi */
 }
 
 /* =========================================================
@@ -312,9 +355,10 @@ function parseCoords(text){
 }
 
 /* =========================================================
-   ✅ SMART LABELS — DONO TEXT (Murabba Red + Killa Blue)
-   ✅ Zoom 17+ pe hi text (light loading)
-   ✅ Max 400 labels
+   ✅ SMART LABELS
+   🟡 Slash wala = Yellow
+   🔵 Pure number = Cyan
+   ❌ Murabba = Hidden
 ========================================================= */
 function updateSmartLabels(){
     labelLayer.clearLayers();
@@ -326,20 +370,20 @@ function updateSmartLabels(){
 
     var selectedKeys = Object.keys(selectedMurabbas).filter(function(k){ return selectedMurabbas[k]; });
 
-    /* Selected murabba — hamesha dono dikhao */
+    /* Selected murabba — us murabba ke sab killa/number */
     if(selectedKeys.length > 0){
         labelItems.forEach(function(item){
             var key = getMurabbaKey(item.name);
             if(selectedMurabbas[key]){
-                labelLayer.addLayer(item.isKilla ? createKillaLabel(item) : createMurabbaLabel(item));
+                var lbl = createSmartLabel(item);
+                if(lbl) labelLayer.addLayer(lbl);
             }
         });
     }
 
-    /* Zoom 17+ pe hi text dikhao */
     if(zoom < 17) return;
 
-    /* ✅ Dono murabba aur killa text dikhao — max 400 */
+    /* Zoom 17+ — viewport ke sab killa/number */
     for(var i=0; i<labelItems.length; i++){
         var item = labelItems[i];
 
@@ -348,7 +392,10 @@ function updateSmartLabels(){
 
         if(!bounds.contains([item.lat, item.lng])) continue;
 
-        labelLayer.addLayer(item.isKilla ? createKillaLabel(item) : createMurabbaLabel(item));
+        var lbl = createSmartLabel(item);
+        if(!lbl) continue;   /* murabba text skip */
+
+        labelLayer.addLayer(lbl);
         count++;
         if(count >= 400) break;
     }
@@ -477,8 +524,8 @@ async function loadKMZ(filename){
         console.log("✅ Loaded:", filename, {
             polygons: polygons.length,
             labels: labelItems.length,
-            killaLabels: labelItems.filter(function(i){ return i.isKilla; }).length,
-            murabaLabels: labelItems.filter(function(i){ return !i.isKilla; }).length
+            slashKilla: labelItems.filter(function(i){ return isKillaName(i.name); }).length,
+            pureNumber: labelItems.filter(function(i){ return isPureNumber(i.name); }).length
         });
 
     }catch(error){
