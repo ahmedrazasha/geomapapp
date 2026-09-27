@@ -36,13 +36,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:Ari
 }
 .menu-icon{color:#fff;font-size:22px;width:35px;text-align:center}
 
+/* ✅ Killa text — BLUE */
 .pure-killa-text{background:transparent!important;border:none!important;box-shadow:none!important}
 .pure-killa-text span{
-    display:block;transform:translate(-50%,-50%);color:#ffff00;font-weight:900;
+    display:block;transform:translate(-50%,-50%);color:#00ffff;font-weight:900;
     font-size:14px;white-space:nowrap;pointer-events:none;
     text-shadow:1.5px 1.5px 2px #000,-1.5px -1.5px 2px #000,1.5px -1.5px 2px #000,-1.5px 1.5px 2px #000;
 }
 
+/* ✅ Murabba text — BLUE bhi */
 .pure-murabba-text{background:transparent!important;border:none!important;box-shadow:none!important}
 .pure-murabba-text span{
     display:block;transform:translate(-50%,-50%);color:#00ffff;font-weight:900;
@@ -114,23 +116,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:Ari
 "use strict";
 
 /* =========================================================
-   ✅ DEBUG MODE — Console access
-========================================================= */
-window.getLabels   = function(){ return labelItems; };
-window.getPolygons = function(){ return polygons; };
-window.getKmzStats = function(){
-    return {
-        labels: labelItems.length,
-        polygons: polygons.length,
-        killaLabels: labelItems.filter(function(i){ return i.isKilla; }).length,
-        murabaLabels: labelItems.filter(function(i){ return !i.isKilla; }).length,
-        firstLabel: labelItems[0] || null
-    };
-};
-
-/* =========================================================
-   ✅ KMZ FILE LIST
-========================================================= */
+   KMZ FILE LIST — YAHAN ADD/REMOVE KARO
+   ========================================================= */
 var KMZ_FILES = [
     { file: "data.kmz",       name: "Barthla (SAR)" },
     { file: "234p.kmz",       name: "234P" },
@@ -227,12 +214,9 @@ function getMurabbaKey(name){
     return normalizeName(value);
 }
 
-/* =========================================================
-   ✅ FIX: Sirf number (2, 25) bhi killa hai
-========================================================= */
+/* ✅ Killa: "418/6" YA sirf "25" */
 function isKillaName(name){
     var n = String(name || "").trim();
-    /* "418/6" type YA sirf "25" type — dono killa hain */
     return /^.+\/\d+$/.test(n) || /^\d+$/.test(n);
 }
 
@@ -301,7 +285,7 @@ function selectFeature(name, openPopup){
     getMurabbaItems(actualName).forEach(function(it){ bounds.extend([it.lat, it.lng]); });
 
     if(bounds.isValid()){
-        map.fitBounds(bounds, { maxZoom:17, padding:[40,40], animate:true });
+        map.fitBounds(bounds, { maxZoom:18, padding:[40,40], animate:true });
     }
 
     if(openPopup && poly){
@@ -328,7 +312,9 @@ function parseCoords(text){
 }
 
 /* =========================================================
-   ✅ SMART LABELS — SIRF KILLA TEXT
+   ✅ SMART LABELS — LIGHT & FAST
+   ✅ Zoom 17+ pe hi text dikhega
+   ✅ Max 400 labels
 ========================================================= */
 function updateSmartLabels(){
     labelLayer.clearLayers();
@@ -340,6 +326,7 @@ function updateSmartLabels(){
 
     var selectedKeys = Object.keys(selectedMurabbas).filter(function(k){ return selectedMurabbas[k]; });
 
+    /* Selected murabba — hamesha dikhao */
     if(selectedKeys.length > 0){
         labelItems.forEach(function(item){
             var key = getMurabbaKey(item.name);
@@ -351,8 +338,10 @@ function updateSmartLabels(){
         });
     }
 
-    if(zoom < 14) return;
+    /* ✅ Zoom 17 se kam pe kuch nahi — LIGHT */
+    if(zoom < 17) return;
 
+    /* Zoom 17+ pe killa text dikhao — max 400 */
     for(var i=0; i<labelItems.length; i++){
         var item = labelItems[i];
 
@@ -365,7 +354,7 @@ function updateSmartLabels(){
 
         labelLayer.addLayer(createKillaLabel(item));
         count++;
-        if(count >= 1500) break;
+        if(count >= 400) break;  /* ✅ 400 max — light */
     }
 }
 
@@ -411,7 +400,6 @@ async function loadKMZ(filename){
         labelLayer.clearLayers();
 
         var allBounds = L.latLngBounds();
-        var stats = { points: 0, polygons: 0, fromPoint: 0, fromPolyCenter: 0, skippedNoName: 0 };
 
         for(var i=0; i<placemarks.length; i++){
             var pm = placemarks[i];
@@ -431,8 +419,6 @@ async function loadKMZ(filename){
             var descNode = pm.getElementsByTagName("description")[0];
             var desc = descNode ? descNode.textContent.trim() : "";
 
-            if(!name) stats.skippedNoName++;
-
             /* POINTS */
             var pointNodes = pm.getElementsByTagName("Point");
             for(var k=0; k<pointNodes.length; k++){
@@ -447,8 +433,6 @@ async function loadKMZ(filename){
                     isKilla:isKillaName(name), isMurabba:!isKillaName(name)
                 });
                 allBounds.extend(pt);
-                stats.points++;
-                stats.fromPoint++;
             }
 
             /* POLYGONS */
@@ -475,20 +459,13 @@ async function loadKMZ(filename){
                 poly.addTo(map);
                 polygons.push(poly);
                 allBounds.extend(poly.getBounds());
-                stats.polygons++;
 
                 if(name && pointNodes.length === 0){
-                    var b = poly.getBounds();
-                    var center = b.getCenter();
-
+                    var center = poly.getBounds().getCenter();
                     labelItems.push({
-                        lat: center.lat,
-                        lng: center.lng,
-                        name: name,
-                        isKilla: isKillaName(name),
-                        isMurabba: !isKillaName(name)
+                        lat: center.lat, lng: center.lng, name: name,
+                        isKilla: isKillaName(name), isMurabba: !isKillaName(name)
                     });
-                    stats.fromPolyCenter++;
                 }
             }
         }
@@ -501,13 +478,11 @@ async function loadKMZ(filename){
 
         loadingMsg.classList.add("hidden");
 
-        console.log("═══════════════════════════════════════");
-        console.log("✅ KMZ Loaded:", filename);
-        console.log("   Polygons:", stats.polygons);
-        console.log("   Total labels:", labelItems.length);
-        console.log("   Killa labels:", labelItems.filter(function(i){ return i.isKilla; }).length);
-        console.log("   Sample:", labelItems.slice(0,5));
-        console.log("═══════════════════════════════════════");
+        console.log("✅ Loaded:", filename, {
+            polygons: polygons.length,
+            labels: labelItems.length,
+            killaLabels: labelItems.filter(function(i){ return i.isKilla; }).length
+        });
 
     }catch(error){
         console.error("KMZ ERROR:", error);
@@ -516,14 +491,14 @@ async function loadKMZ(filename){
 }
 
 /* =========================================================
-   MAP EVENTS
+   MAP EVENTS — Debounced
 ========================================================= */
 var zoomTimer = null;
 map.on("zoomend moveend", function(){
     if(zoomTimer) clearTimeout(zoomTimer);
     zoomTimer = setTimeout(function(){
         updateSmartLabels();
-    }, 100);
+    }, 120);
 });
 
 /* =========================================================
