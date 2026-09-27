@@ -39,7 +39,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:Ari
 .pure-killa-text{background:transparent!important;border:none!important;box-shadow:none!important}
 .pure-killa-text span{
     display:block;transform:translate(-50%,-50%);color:#ffff00;font-weight:900;
-    font-size:14px;white-space:nowrap;pointer-events:none;
+    font-size:13px;white-space:nowrap;pointer-events:none;
     text-shadow:1.5px 1.5px 2px #000,-1.5px -1.5px 2px #000,1.5px -1.5px 2px #000,-1.5px 1.5px 2px #000;
 }
 
@@ -112,6 +112,27 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:Ari
 <script>
 (function(){
 "use strict";
+
+/* =========================================================
+   ✅ DEBUG MODE — Console se access ke liye
+   (Yeh lines IIFE ke andar hain lekin window pe expose karti hain)
+========================================================= */
+window.getLabels   = function(){ return labelItems; };
+window.getPolygons = function(){ return polygons; };
+window.getKmzStats = function(){
+    return {
+        labels: labelItems.length,
+        polygons: polygons.length,
+        killaLabels: labelItems.filter(function(i){ return i.isKilla; }).length,
+        murabaLabels: labelItems.filter(function(i){ return !i.isKilla; }).length,
+        firstLabel: labelItems[0] || null,
+        firstPolygon: polygons[0] ? {
+            name: polygons[0].customName,
+            center: polygons[0].getBounds().getCenter()
+        } : null
+    };
+};
+/* ========================================================= */
 
 /* =========================================================
    ✅ KMZ FILE LIST — YAHAN ADD/REMOVE KARO
@@ -347,7 +368,7 @@ function updateSmartLabels(){
 }
 
 /* =========================================================
-   LOAD KMZ — Auto-generate labels from polygons
+   ✅ BULLET-PROOF KMZ LOADER
 ========================================================= */
 async function loadKMZ(filename){
     try{
@@ -388,20 +409,31 @@ async function loadKMZ(filename){
         labelLayer.clearLayers();
 
         var allBounds = L.latLngBounds();
-        var totalPoints = 0;
-        var totalPolygons = 0;
+        var stats = { points: 0, polygons: 0, fromPoint: 0, fromPolyCenter: 0, skippedNoName: 0 };
 
         for(var i=0; i<placemarks.length; i++){
             var pm = placemarks[i];
-            var nameNode = pm.getElementsByTagName("name")[0];
+
+            var name = "";
+            for(var nc=0; nc<pm.children.length; nc++){
+                if(pm.children[nc].tagName === "name"){
+                    name = pm.children[nc].textContent.trim();
+                    break;
+                }
+            }
+            if(!name){
+                var nameNode = pm.getElementsByTagName("name")[0];
+                if(nameNode) name = nameNode.textContent.trim();
+            }
+
             var descNode = pm.getElementsByTagName("description")[0];
-            var name = nameNode ? nameNode.textContent.trim() : "";
             var desc = descNode ? descNode.textContent.trim() : "";
 
-            /* =========================================================
-               POINTS — Agar hain toh use karo
-            ========================================================= */
+            if(!name) stats.skippedNoName++;
+
+            /* POINTS */
             var pointNodes = pm.getElementsByTagName("Point");
+
             for(var k=0; k<pointNodes.length; k++){
                 var pNode = pointNodes[k].getElementsByTagName("coordinates")[0];
                 if(!pNode || !name) continue;
@@ -414,13 +446,13 @@ async function loadKMZ(filename){
                     isKilla:isKillaName(name), isMurabba:!isKillaName(name)
                 });
                 allBounds.extend(pt);
-                totalPoints++;
+                stats.points++;
+                stats.fromPoint++;
             }
 
-            /* =========================================================
-               POLYGONS
-            ========================================================= */
+            /* POLYGONS */
             var polyNodes = pm.getElementsByTagName("Polygon");
+
             for(var j=0; j<polyNodes.length; j++){
                 var cNode = polyNodes[j].getElementsByTagName("coordinates")[0];
                 if(!cNode) continue;
@@ -443,15 +475,20 @@ async function loadKMZ(filename){
                 poly.addTo(map);
                 polygons.push(poly);
                 allBounds.extend(poly.getBounds());
-                totalPolygons++;
+                stats.polygons++;
 
-                /* ✅ Point na ho toh polygon ke center pe label banao */
-                if(pointNodes.length === 0 && name){
-                    var center = poly.getBounds().getCenter();
+                if(name && pointNodes.length === 0){
+                    var b = poly.getBounds();
+                    var center = b.getCenter();
+
                     labelItems.push({
-                        lat:center.lat, lng:center.lng, name:name,
-                        isKilla:isKillaName(name), isMurabba:!isKillaName(name)
+                        lat: center.lat,
+                        lng: center.lng,
+                        name: name,
+                        isKilla: isKillaName(name),
+                        isMurabba: !isKillaName(name)
                     });
+                    stats.fromPolyCenter++;
                 }
             }
         }
@@ -464,12 +501,17 @@ async function loadKMZ(filename){
 
         loadingMsg.classList.add("hidden");
 
-        console.log("✅ Loaded:", filename, {
-            polygons: totalPolygons,
-            points: totalPoints,
-            labels: labelItems.length,
-            sample: labelItems[0] || "کوئی نہیں"
-        });
+        /* ✅ Console mein detailed info */
+        console.log("═══════════════════════════════════════");
+        console.log("✅ KMZ Loaded:", filename);
+        console.log("   Polygons:          ", stats.polygons);
+        console.log("   Points:            ", stats.points);
+        console.log("   Labels (from Point):", stats.fromPoint);
+        console.log("   Labels (from Center):", stats.fromPolyCenter);
+        console.log("   Skipped (no name):  ", stats.skippedNoName);
+        console.log("   Total labels:       ", labelItems.length);
+        console.log("   First 3 labels:", labelItems.slice(0,3));
+        console.log("═══════════════════════════════════════");
 
     }catch(error){
         console.error("KMZ ERROR:", error);
