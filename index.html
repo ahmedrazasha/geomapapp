@@ -115,22 +115,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:Ari
 
 /* =========================================================
    ✅ KMZ FILE LIST — YAHAN ADD/REMOVE KARO
-   Format: { file: "filename.kmz", name: "Dropdown Name" }
    ========================================================= */
 var KMZ_FILES = [
-    { file: "data.kmz",  name: "Barthla (SAR)" },
-	{ file: "234p.kmz",  name: "234P" },
-	{ file: "175p.kmz",  name: "175p" },
-	{ file: "Goth Jungo.kmz",  name: "Goth jungo" },
-	{ file: "Sadiqabad.kmz",  name: "sadiqabad" },
-	{ file: "Kotsabzal.kmz",  name: "kotSabzal" }
-    /* Naya KMZ add karne ke liye neeche wali line copy karo:
-    , { file: "234p.kmz", name: "234P" }
-    , { file: "mouza3.kmz", name: "Mouza 3" }
-    */
+    { file: "data.kmz",       name: "Barthla (SAR)" },
+    { file: "234p.kmz",       name: "234P" },
+    { file: "175p.kmz",       name: "175p" },
+    { file: "Goth Jungo.kmz", name: "Goth Jungo" },
+    { file: "Sadiqabad.kmz",  name: "Sadiqabad" },
+    { file: "Kotsabzal.kmz",  name: "Kot Sabzal" }
 ];
 /* ========================================================= */
-
 
 var loadingMsg = document.getElementById("loadingMsg");
 var fileSelect = document.getElementById("fileSelect");
@@ -261,6 +255,9 @@ function createMurabbaLabel(item){
     });
 }
 
+/* =========================================================
+   ✅ SELECT FEATURE — SIRF YEH MURABBA DIKHEGA, BAQI NAHI
+========================================================= */
 function selectFeature(name, openPopup){
     if(!name) return false;
     var item = getItemByName(name);
@@ -271,11 +268,18 @@ function selectFeature(name, openPopup){
     var murabbaKey = getMurabbaKey(actualName);
     if(!murabbaKey) return false;
 
+    /* ✅ Pehle purana text + highlight saaf karo */
+    selectedMurabbas = {};
+    polygons.forEach(function(p){ p.setStyle(defaultStyle); });
+
+    /* Ab naya murabba select karo */
     selectedMurabbas[murabbaKey] = true;
     selectedName = actualName;
 
+    /* Yellow highlight */
     getMurabbaPolygons(actualName).forEach(function(p){ p.setStyle(highlightStyle); });
 
+    /* Map zoom to selected murabba */
     var bounds = L.latLngBounds();
     getMurabbaPolygons(actualName).forEach(function(p){ bounds.extend(p.getBounds()); });
     getMurabbaItems(actualName).forEach(function(it){ bounds.extend([it.lat, it.lng]); });
@@ -284,12 +288,15 @@ function selectFeature(name, openPopup){
         map.fitBounds(bounds, { maxZoom:18, padding:[30,30], animate:true });
     }
 
+    /* Popup */
     if(openPopup && poly){
         poly.bindPopup(
             "<b>تفصیل:</b> " + escapeHtml(poly.customName || "") +
             (poly.customDesc ? "<br>" + poly.customDesc : "")
         ).openPopup();
     }
+
+    /* ✅ Sirf selected murabba ka text dikhao */
     updateSmartLabels();
     return true;
 }
@@ -307,38 +314,23 @@ function parseCoords(text){
 }
 
 /* =========================================================
-   SMART LABELS
+   ✅ SMART LABELS — SIRF SELECTED MURABBA (FAST!)
 ========================================================= */
 function updateSmartLabels(){
     labelLayer.clearLayers();
     if(labelItems.length === 0) return;
 
+    /* Agar kuch select nahi → koi text nahi (fast loading) */
     var selectedKeys = Object.keys(selectedMurabbas).filter(function(k){ return selectedMurabbas[k]; });
+    if(selectedKeys.length === 0) return;
 
-    if(selectedKeys.length > 0){
-        labelItems.forEach(function(item){
-            var key = getMurabbaKey(item.name);
-            if(selectedMurabbas[key]){
-                labelLayer.addLayer(item.isKilla ? createKillaLabel(item) : createMurabbaLabel(item));
-            }
-        });
-        return;
-    }
-
-    var zoom = map.getZoom();
-    if(zoom < 14) return;
-    var bounds = map.getBounds();
-    var count = 0;
-
-    for(var i=0; i<labelItems.length; i++){
-        var item = labelItems[i];
-        if(!bounds.contains([item.lat, item.lng])) continue;
-        if(zoom < 16 && item.isKilla) continue;
-
-        labelLayer.addLayer(item.isKilla ? createKillaLabel(item) : createMurabbaLabel(item));
-        count++;
-        if(count >= 400) break;
-    }
+    /* Sirf selected murabba ka text */
+    labelItems.forEach(function(item){
+        var key = getMurabbaKey(item.name);
+        if(selectedMurabbas[key]){
+            labelLayer.addLayer(item.isKilla ? createKillaLabel(item) : createMurabbaLabel(item));
+        }
+    });
 }
 
 /* =========================================================
@@ -375,7 +367,7 @@ async function loadKMZ(filename){
         var placemarks = xml.getElementsByTagName("Placemark");
         if(placemarks.length === 0) throw new Error("Placemark نہیں ملا");
 
-        /* Clear previous layers */
+        /* Clear old */
         polygons.forEach(function(p){ map.removeLayer(p); });
         polygons = [];
         labelItems = [];
@@ -434,7 +426,9 @@ async function loadKMZ(filename){
         if(!allBounds.isValid()) throw new Error("Valid coordinates نہیں ملیں");
 
         map.fitBounds(allBounds, { padding:[20,20] });
-        updateSmartLabels();
+
+        /* ✅ Koi text load nahi — click pe hi aayega */
+        labelLayer.clearLayers();
 
         loadingMsg.classList.add("hidden");
         console.log("✅ Loaded:", filename, { polygons: polygons.length, labels: labelItems.length });
@@ -446,10 +440,10 @@ async function loadKMZ(filename){
 }
 
 /* =========================================================
-   MAP EVENTS
+   ✅ MAP EVENTS — Fast zoom (no text reload)
 ========================================================= */
-map.on("zoomend moveend", updateSmartLabels);
 map.on("zoomstart", function(){ labelLayer.clearLayers(); });
+/* Note: zoomend pe text reload nahi karega — click mode hai */
 
 /* =========================================================
    COORDINATE SEARCH
@@ -466,8 +460,10 @@ function searchCoordinate(value){
         return true;
     }
 
+    /* Clear all text + highlight */
     selectedMurabbas = {};
     polygons.forEach(function(p){ p.setStyle(defaultStyle); });
+    labelLayer.clearLayers();
     selectedName = null;
 
     map.setView([lat, lng], 18, { animate:true });
@@ -482,7 +478,6 @@ function searchCoordinate(value){
         "<b>📍 Location</b><br>Lat: " + lat.toFixed(6) + "<br>Lng: " + lng.toFixed(6)
     ).openPopup();
 
-    updateSmartLabels();
     return true;
 }
 
@@ -509,7 +504,7 @@ document.getElementById("coordSearchBtn").addEventListener("click", function(){
 });
 
 /* =========================================================
-   ✅ BUILD DROPDOWN FROM KMZ_FILES ARRAY
+   BUILD DROPDOWN
 ========================================================= */
 function buildDropdown(){
     fileSelect.innerHTML = "";
@@ -546,7 +541,7 @@ if(KMZ_FILES.length > 0){
 }
 
 /* =========================================================
-   SERVICE WORKER (optional)
+   SERVICE WORKER
 ========================================================= */
 if("serviceWorker" in navigator){
     window.addEventListener("load", function(){
