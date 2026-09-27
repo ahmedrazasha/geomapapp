@@ -36,18 +36,18 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:Ari
 }
 .menu-icon{color:#fff;font-size:22px;width:35px;text-align:center}
 
-/* ✅ Killa text — BLUE */
+/* ✅ KILLA text — CYAN BLUE (#00d4ff) */
 .pure-killa-text{background:transparent!important;border:none!important;box-shadow:none!important}
 .pure-killa-text span{
-    display:block;transform:translate(-50%,-50%);color:#00ffff;font-weight:900;
+    display:block;transform:translate(-50%,-50%);color:#00d4ff;font-weight:900;
     font-size:14px;white-space:nowrap;pointer-events:none;
     text-shadow:1.5px 1.5px 2px #000,-1.5px -1.5px 2px #000,1.5px -1.5px 2px #000,-1.5px 1.5px 2px #000;
 }
 
-/* ✅ Murabba text — BLUE bhi */
+/* ✅ MURABBA text — RED-ORANGE (#ff5500) */
 .pure-murabba-text{background:transparent!important;border:none!important;box-shadow:none!important}
 .pure-murabba-text span{
-    display:block;transform:translate(-50%,-50%);color:#00ffff;font-weight:900;
+    display:block;transform:translate(-50%,-50%);color:#ff5500;font-weight:900;
     font-size:15px;white-space:nowrap;pointer-events:none;
     text-shadow:2px 2px 3px #000,-2px -2px 3px #000,2px -2px 3px #000,-2px 2px 3px #000;
 }
@@ -214,7 +214,7 @@ function getMurabbaKey(name){
     return normalizeName(value);
 }
 
-/* ✅ Killa: "418/6" YA sirf "25" */
+/* ✅ Killa: "418/6" type YA sirf "25" type */
 function isKillaName(name){
     var n = String(name || "").trim();
     return /^.+\/\d+$/.test(n) || /^\d+$/.test(n);
@@ -312,8 +312,8 @@ function parseCoords(text){
 }
 
 /* =========================================================
-   ✅ SMART LABELS — LIGHT & FAST
-   ✅ Zoom 17+ pe hi text dikhega
+   ✅ SMART LABELS — DONO TEXT (Murabba Red + Killa Blue)
+   ✅ Zoom 17+ pe hi text (light loading)
    ✅ Max 400 labels
 ========================================================= */
 function updateSmartLabels(){
@@ -326,22 +326,20 @@ function updateSmartLabels(){
 
     var selectedKeys = Object.keys(selectedMurabbas).filter(function(k){ return selectedMurabbas[k]; });
 
-    /* Selected murabba — hamesha dikhao */
+    /* Selected murabba — hamesha dono dikhao */
     if(selectedKeys.length > 0){
         labelItems.forEach(function(item){
             var key = getMurabbaKey(item.name);
             if(selectedMurabbas[key]){
-                if(item.isKilla){
-                    labelLayer.addLayer(createKillaLabel(item));
-                }
+                labelLayer.addLayer(item.isKilla ? createKillaLabel(item) : createMurabbaLabel(item));
             }
         });
     }
 
-    /* ✅ Zoom 17 se kam pe kuch nahi — LIGHT */
+    /* Zoom 17+ pe hi text dikhao */
     if(zoom < 17) return;
 
-    /* Zoom 17+ pe killa text dikhao — max 400 */
+    /* ✅ Dono murabba aur killa text dikhao — max 400 */
     for(var i=0; i<labelItems.length; i++){
         var item = labelItems[i];
 
@@ -350,11 +348,9 @@ function updateSmartLabels(){
 
         if(!bounds.contains([item.lat, item.lng])) continue;
 
-        if(!item.isKilla) continue;
-
-        labelLayer.addLayer(createKillaLabel(item));
+        labelLayer.addLayer(item.isKilla ? createKillaLabel(item) : createMurabbaLabel(item));
         count++;
-        if(count >= 400) break;  /* ✅ 400 max — light */
+        if(count >= 400) break;
     }
 }
 
@@ -481,7 +477,8 @@ async function loadKMZ(filename){
         console.log("✅ Loaded:", filename, {
             polygons: polygons.length,
             labels: labelItems.length,
-            killaLabels: labelItems.filter(function(i){ return i.isKilla; }).length
+            killaLabels: labelItems.filter(function(i){ return i.isKilla; }).length,
+            murabaLabels: labelItems.filter(function(i){ return !i.isKilla; }).length
         });
 
     }catch(error){
@@ -491,7 +488,7 @@ async function loadKMZ(filename){
 }
 
 /* =========================================================
-   MAP EVENTS — Debounced
+   MAP EVENTS
 ========================================================= */
 var zoomTimer = null;
 map.on("zoomend moveend", function(){
